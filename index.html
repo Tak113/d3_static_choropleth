@@ -1,0 +1,142 @@
+<!-- 
+
+    Adapted from Mike Bostock at bl.ocks.org
+    https://bl.ocks.org/mbostock/4060606 as a reference
+
+ -->
+
+<!DOCTYPE html>
+<head>
+    <meta charset="utf-8">
+    <meta name="description" content="">
+    <title>Choropleth maps : US unemployment rate</title>
+    <!-- Bootstrap Core CSS -->
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <nav class="navbar navbar-default">
+        <div class="container">
+            <a class ="navbar-brand" href="#"><img id = "logo" src="img/logo.png"></a>
+        </div>
+    </nav>
+    <svg width="960" height="600"></svg>
+
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+<script src="//d3js.org/topojson.v2.min.js"></script>
+
+<script>
+
+    //svg setting
+    var svg = d3.select("svg"),
+        width = svg.attr("width")
+        height = svg.attr("height");
+
+    //function setting    
+    var unemployment = d3.map(); //pass unemployment to d3.map function
+    var path = d3.geoPath(); //pass path info to d3.geoPath function
+
+
+    //****************************legend block************************************//
+    
+    //scaling
+    var x = d3.scaleLinear() //for legend
+        .domain([1,10]) //color indicator?
+        .rangeRound([600, 860]) //legend x starts from 600 and end at 860
+    var color = d3.scaleThreshold() // for legend
+        .domain(d3.range(2,10))
+        .range(d3.schemeBlues[9]); //from d3-scale-chromatic library
+
+    //g for legend block
+    var g = svg.append("g")
+        .attr("class", "key")
+        .attr("transform", "translate(0,40)")
+    //data joins for legend
+    g.selectAll("rect")
+        .data(color.range().map(d=>{
+            d = color.invertExtent(d);
+            if (d[0] == null) d[0] = x.domain()[0]; //d[0] and d[1] are representing min and max of the legend
+            if (d[1] == null) d[1] = x.domain()[1];
+            return d;
+        }))
+        .enter().append("rect")
+            .attr("height", 8)
+            .attr("x", d=>{return x(d[0]); })
+            .attr("width", d=>{return x(d[1]) - x(d[0]); })
+            .attr("fill", d=>{return color(d[0]); })
+    //text for legend
+    g.append("text")
+        .attr("class", "caption")
+        .attr("x", x.range()[0]) //min in x range, 600
+        .attr("y", -6)
+        .attr("fill", "#000")
+        .attr("text-anchor", "start")
+        .attr("font-weight", "bold")
+        .text("Unemployment rate");
+
+    //axis(tick) and its text setting
+    g.call(d3.axisBottom(x)
+        .tickSize(13)
+        .tickFormat((x,i)=>{return i ? x : x + "%"; }) //if i is not 0, don put anything, if is 0 put %
+        .tickValues(color.domain()))
+    .select(".domain")
+        .remove();
+
+    //****************************legend block************************************//
+    
+
+    //****************************loading data************************************//
+    //load data
+    var promises = [
+        d3.json("https://d3js.org/us-10m.v1.json"), //us data, data name is us
+        d3.tsv("data/map.tsv", d=>{unemployment.set(d.id, +d.rate); }) //unemployment data, data name is unemployment
+    ]
+
+    /*  
+    Before V5
+    d3.queue()
+        .defer(d3.json, "https://d3js.org/us-10m.v1.json")
+        .defer(d3.tsv, "data/map.tsv", function(d) { unemployment.set(d.id, +d.rate); })
+        .await(ready);
+    */    
+
+    //error handling
+    Promise.all(promises).then(data=>{
+        ready(data[0]);
+    }).catch(error=>{
+        console.log(error);
+    });
+
+    //data manipulation for 2 dataset
+    function ready(us) {
+        //note, it only passed us (json object) object here, but tsv file was also passed thru d3.map function using "unemployment" created above, hence you see unemployment array below
+        console.log(us) //id in unemployment are mapped to ie in us file (objets array)
+        console.log(unemployment)
+
+        svg.append("g")
+            .attr("class", "counties")
+            .selectAll("path")
+                .data(topojson.feature(us, us.objects.counties).features) //using feature function and provides feature
+            .enter().append("path")
+                .attr("fill", d=>{return color(d.rate = unemployment.get(d.id)); }) //use id which is same between us and unemployment array and set different color by rate
+                .attr("d", path) //path generator are fed. note, it didn't set gemap generator, but map has already been ready for the file we are using here
+            .append("title") //tooltip
+                .text(d=>{return d.rate + "%"; });
+
+        //states boundary
+        svg.append("path")
+            .datum(topojson.mesh(us, us.objects.states, (a,b)=>{return a != b; }))
+            .attr("class", "states")
+            .attr("d", path);
+
+    }
+
+    //****************************loading data************************************//
+
+
+</script>
+
+</body>
